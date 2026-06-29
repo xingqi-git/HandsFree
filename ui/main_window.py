@@ -1,6 +1,6 @@
-from PyQt6.QtWidgets import (QMainWindow, QWidget,
+from PyQt5.QtWidgets import (QMainWindow, QWidget,
                              QVBoxLayout, QSplitter, QLabel, QMessageBox)
-from PyQt6.QtCore import Qt
+from PyQt5.QtCore import Qt
 from .script_panel import ScriptPanel
 from .edit_area import ScriptEditArea
 from .operation_panel import OperationPanel
@@ -27,12 +27,12 @@ class MainWindow(QMainWindow):
 
         # 标题栏
         title = QLabel("HandsFree")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("font-size: 24px; font-weight: bold;")
         main_layout.addWidget(title)
 
         # 三栏分割器
-        mid_splitter = QSplitter(Qt.Orientation.Horizontal)
+        mid_splitter = QSplitter(Qt.Horizontal)
         mid_splitter.setHandleWidth(2)
 
         # 初始化三个核心面板
@@ -55,11 +55,7 @@ class MainWindow(QMainWindow):
         # 信号槽连接
         self._connect_signals()
 
-        # 启动时加载脚本
         self._load_scripts()
-        # 如果没有加载到任何脚本，才新建默认脚本1
-        if self.script_panel.script_list.count() == 0:
-            self.script_panel.add_new_script()
 
     def _connect_signals(self):
         # 脚本管理信号
@@ -87,12 +83,12 @@ class MainWindow(QMainWindow):
             self,  # 父窗口
             "执行确认",  # 提示框标题
             "我已经检查了停止条件，确认要执行",  # 提示内容
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,  # 按钮选项
-            QMessageBox.StandardButton.No  # 默认选中“否”
+            QMessageBox.Yes | QMessageBox.No,  # 按钮选项
+            QMessageBox.No  # 默认选中"否"默认选中“否”
         )
 
         # 判断选择：只有点击“是”才继续执行
-        if reply != QMessageBox.StandardButton.Yes:
+        if reply != QMessageBox.Yes:
             return
 
         self.run_bar.set_running_state(True)

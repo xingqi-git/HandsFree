@@ -1,6 +1,6 @@
-from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QApplication
-from PyQt6.QtCore import pyqtSignal, Qt, QObject
-from PyQt6.QtGui import QFont, QPainter, QColor, QPen
+from PyQt5.QtWidgets import QWidget, QLabel, QVBoxLayout, QApplication
+from PyQt5.QtCore import pyqtSignal, Qt, QObject
+from PyQt5.QtGui import QFont, QPainter, QColor, QPen
 
 
 class ScreenMaskWidget(QWidget):
@@ -14,19 +14,19 @@ class ScreenMaskWidget(QWidget):
     def _init_ui(self):
         # 设置全屏无边框窗口
         self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
+            Qt.FramelessWindowHint
+            | Qt.WindowStaysOnTopHint
+            | Qt.Tool
         )
         # 设置窗口透明度效果
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_TranslucentBackground)
         # 全屏显示
         screen = QApplication.primaryScreen().geometry()
         self.setGeometry(screen)
         # 设置鼠标追踪
         self.setMouseTracking(True)
         # 设置光标样式
-        self.setCursor(Qt.CursorShape.CrossCursor)
+        self.setCursor(Qt.CrossCursor)
 
         # 创建坐标提示标签
         self.tip_label = QLabel(self)
@@ -47,28 +47,28 @@ class ScreenMaskWidget(QWidget):
 
     def mouseMoveEvent(self, event):
         # 更新提示标签位置
-        pos = event.position()
-        x, y = int(pos.x()), int(pos.y())
+        pos = event.pos()
+        x, y = pos.x(), pos.y()
         self.tip_label.setText(f"坐标: ({x}, {y})\n左键确认 | 右键取消")
         self.tip_label.adjustSize()
         # 将标签放在鼠标右下方，避免遮挡
         self.tip_label.move(x + 20, y + 20)
 
     def mousePressEvent(self, event):
-        pos = event.position()
-        x, y = int(pos.x()), int(pos.y())
-        if event.button() == Qt.MouseButton.LeftButton:
+        pos = event.pos()
+        x, y = pos.x(), pos.y()
+        if event.button() == Qt.LeftButton:
             # 左键确认坐标
             self.close()
             self.picked.emit(x, y)
-        elif event.button() == Qt.MouseButton.RightButton:
+        elif event.button() == Qt.RightButton:
             # 右键取消
             self.close()
             self.canceled.emit()
 
     def keyPressEvent(self, event):
         # ESC键取消
-        if event.key() == Qt.Key.Key_Escape:
+        if event.key() == Qt.Key_Escape:
             self.close()
             self.canceled.emit()
 

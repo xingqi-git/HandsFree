@@ -1,6 +1,6 @@
-from PyQt6.QtWidgets import QTextEdit
-from PyQt6.QtGui import QFont, QTextCursor
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt5.QtWidgets import QTextEdit
+from PyQt5.QtGui import QFont, QTextCursor
+from PyQt5.QtCore import pyqtSignal, Qt
 
 
 class ScriptEditArea(QTextEdit):
@@ -24,7 +24,7 @@ class ScriptEditArea(QTextEdit):
         cursor = self.textCursor()
         # 如果光标不在文档末尾，则移到当前行的末尾
         if not cursor.atEnd():
-            cursor.movePosition(QTextCursor.MoveOperation.EndOfLine)
+            cursor.movePosition(QTextCursor.EndOfLine)
         cursor.insertText(f"\n{operation_text}")
         self.setTextCursor(cursor)
 

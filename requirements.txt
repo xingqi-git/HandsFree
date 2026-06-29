@@ -1,4 +1,4 @@
-PyQt6>=6.7.0
+PyQt5>=5.15.0
 pyautogui>=0.9.54
 pynput>=1.7.7
 python-xlib>=0.33

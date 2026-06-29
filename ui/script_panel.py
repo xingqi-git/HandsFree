@@ -1,7 +1,7 @@
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QListWidget,
+from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QListWidget,
                              QListWidgetItem, QPushButton, QInputDialog, QMessageBox)
-from PyQt6.QtCore import pyqtSignal, Qt
-from PyQt6.QtGui import QFont
+from PyQt5.QtCore import pyqtSignal, Qt
+from PyQt5.QtGui import QFont
 
 
 class ScriptPanel(QWidget):
@@ -29,7 +29,7 @@ class ScriptPanel(QWidget):
 
         # 新建按钮
         self.add_btn = QPushButton("+")
-        self.add_btn.setFont(QFont("SimHei", 24, QFont.Weight.Bold))
+        self.add_btn.setFont(QFont("SimHei", 12, QFont.Bold))
         self.add_btn.setFixedHeight(50)
         self.add_btn.setStyleSheet("""
             QPushButton {border: 1px solid #000; background: #f0f0f0;}
@@ -39,7 +39,7 @@ class ScriptPanel(QWidget):
 
         # 删除按钮
         self.del_btn = QPushButton("-")
-        self.del_btn.setFont(QFont("SimHei", 24, QFont.Weight.Bold))
+        self.del_btn.setFont(QFont("SimHei", 12, QFont.Bold))
         self.del_btn.setFixedHeight(50)
         self.del_btn.setStyleSheet("""
             QPushButton {border: 1px solid #000; background: #f0f0f0;}
@@ -71,12 +71,12 @@ class ScriptPanel(QWidget):
         self.script_dict[script_name] = ""
 
         item = QListWidgetItem(script_name)
-        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        item.setTextAlignment(Qt.AlignCenter)
 
         # 把初始名称存到item的Data里，作为唯一标识
-        item.setData(Qt.ItemDataRole.UserRole, script_name)
+        item.setData(Qt.UserRole, script_name)
         # 开启编辑权限
-        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
+        item.setFlags(item.flags() | Qt.ItemIsEditable)
 
         # 阻塞信号，避免初始化时触发itemChanged
         self.script_list.blockSignals(True)
@@ -94,14 +94,14 @@ class ScriptPanel(QWidget):
         reply = QMessageBox.question(
             self, "确认删除",
             f"确定要删除脚本 '{script_name}' 吗？",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
         )
-        if reply != QMessageBox.StandardButton.Yes:
+        if reply != QMessageBox.Yes:
             return
 
         # 使用UserRole中存储的原始名称作为key
-        script_key = current_item.data(Qt.ItemDataRole.UserRole)
+        script_key = current_item.data(Qt.UserRole)
         if script_key in self.script_dict:
             del self.script_dict[script_key]
 
@@ -129,7 +129,7 @@ class ScriptPanel(QWidget):
     def _on_item_renamed(self, item):
         new_name = item.text().strip()
         # 从Data里取出修改前的旧名称（绝对可靠）
-        old_name = item.data(Qt.ItemDataRole.UserRole)
+        old_name = item.data(Qt.UserRole)
 
         # 如果名称为空，恢复为旧名称
         if not new_name:
@@ -171,9 +171,9 @@ class ScriptPanel(QWidget):
 
         for name in self.script_dict:
             item = QListWidgetItem(name)
-            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            item.setData(Qt.ItemDataRole.UserRole, name)
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
+            item.setTextAlignment(Qt.AlignCenter)
+            item.setData(Qt.UserRole, name)
+            item.setFlags(item.flags() | Qt.ItemIsEditable)
             self.script_list.addItem(item)
 
         if self.script_list.count() > 0:

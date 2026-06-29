@@ -3,7 +3,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from PyQt6.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication
 from ui.main_window import MainWindow
 # 打包命令：pyinstaller -F -w main.py --upx-dir ../upx-5.1.1/upx.exe
 

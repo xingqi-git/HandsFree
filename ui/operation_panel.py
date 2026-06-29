@@ -1,6 +1,6 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QMessageBox, QInputDialog, QDialog, QGridLayout
-from PyQt6.QtCore import pyqtSignal, QObject
-from PyQt6.QtGui import QFont
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QMessageBox, QInputDialog, QDialog, QGridLayout
+from PyQt5.QtCore import pyqtSignal, QObject
+from PyQt5.QtGui import QFont
 from core.mouse_listener import CoordinatePicker
 
 

@@ -1,7 +1,7 @@
-from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QPushButton,
+from PyQt5.QtWidgets import (QWidget, QHBoxLayout, QPushButton,
                              QLineEdit, QLabel)
-from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtGui import QFont, QIntValidator
+from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtGui import QFont, QIntValidator
 
 
 class RunBar(QWidget):
