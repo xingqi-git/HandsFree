@@ -19,8 +19,9 @@ class RunBar(QWidget):
 
         # 开始按钮
         self.start_btn = QPushButton("开始运行")
+        self.start_btn_text = "开始运行"
         self.start_btn.setFont(QFont("SimHei", 14))
-        self.start_btn.setFixedHeight(40)
+        self.start_btn.setFixedSize(200, 40)
         self.start_btn.setStyleSheet("""
             QPushButton {border: 1px solid #000; background: #0078d7; color: white;}
             QPushButton:hover {background: #005a9e;}
@@ -41,8 +42,9 @@ class RunBar(QWidget):
 
         # 停止按钮
         self.stop_btn = QPushButton("停止运行")
+        self.stop_btn_text = "停止运行"
         self.stop_btn.setFont(QFont("SimHei", 14))
-        self.stop_btn.setFixedHeight(40)
+        self.stop_btn.setFixedSize(200, 40)
         self.stop_btn.setEnabled(False)
         self.stop_btn.setStyleSheet("""
             QPushButton {border: 1px solid #000; background: #d83b01; color: white;}
@@ -64,3 +66,15 @@ class RunBar(QWidget):
         self.start_btn.setEnabled(not is_running)
         self.stop_btn.setEnabled(is_running)
         self.run_count_edit.setEnabled(not is_running)
+
+    def get_run_count(self):
+        """获取当前设置的运行次数"""
+        count_text = self.run_count_edit.text().strip()
+        return int(count_text) if count_text else 0
+
+    def set_hotkey_hint(self, start_hotkey=None, stop_hotkey=None):
+        """设置按钮上的热键提示"""
+        if start_hotkey:
+            self.start_btn.setText(f"{self.start_btn_text} ({start_hotkey})")
+        if stop_hotkey:
+            self.stop_btn.setText(f"{self.stop_btn_text} ({stop_hotkey})")

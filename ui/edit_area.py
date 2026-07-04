@@ -22,10 +22,17 @@ class ScriptEditArea(QTextEdit):
 
     def insert_operation_line(self, operation_text):
         cursor = self.textCursor()
-        # 如果光标不在文档末尾，则移到当前行的末尾
-        if not cursor.atEnd():
+        # 获取当前行内容
+        cursor.select(QTextCursor.LineUnderCursor)
+        current_line = cursor.selectedText().strip()
+        
+        if not current_line:
+            # 当前行为空，直接插入到当前行
+            cursor.insertText(operation_text)
+        else:
+            # 当前行有内容，插入到下一行
             cursor.movePosition(QTextCursor.EndOfLine)
-        cursor.insertText(f"\n{operation_text}")
+            cursor.insertText(f"\n{operation_text}")
         self.setTextCursor(cursor)
 
     def insert_mouse_move_line(self, x, y):
