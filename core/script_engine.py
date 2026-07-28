@@ -20,6 +20,8 @@ class ScriptEngine(QThread):
         self.wait_re = re.compile(r"等待\((\d+)秒\)")
         self.input_re = re.compile(r"输入\((.*?)\)")
         self.key_re = re.compile(r"键盘按键\((.*?)\)")
+        self.key_down_re = re.compile(r"键盘按下\((.*?)\)")
+        self.key_up_re = re.compile(r"键盘抬起\((.*?)\)")
         self.loop_start_re = re.compile(r"循环开始(\d+)\((\d+)次\)")
         self.loop_end_re = re.compile(r"结束循环(\d+)")
         # 递增模式正则：匹配数字{{+N}}格式
@@ -33,7 +35,25 @@ class ScriptEngine(QThread):
             "F1": "f1", "F2": "f2", "F3": "f3", "F4": "f4", "F5": "f5", "F6": "f6",
             "F7": "f7", "F8": "f8", "F9": "f9", "F10": "f10", "F11": "f11", "F12": "f12",
             "Home": "home", "End": "end", "Insert": "insert", "Esc": "esc",
-            "空格": "space"
+            "空格": "space",
+            # 字母A-Z
+            "A": "a", "B": "b", "C": "c", "D": "d", "E": "e",
+            "F": "f", "G": "g", "H": "h", "I": "i", "J": "j",
+            "K": "k", "L": "l", "M": "m", "N": "n", "O": "o",
+            "P": "p", "Q": "q", "R": "r", "S": "s", "T": "t",
+            "U": "u", "V": "v", "W": "w", "X": "x", "Y": "y",
+            "Z": "z",
+            # 数字0-9
+            "0": "0", "1": "1", "2": "2", "3": "3", "4": "4",
+            "5": "5", "6": "6", "7": "7", "8": "8", "9": "9",
+            # 常用符号
+            "=": "=", "-": "-", "[": "[", "]": "]", "\\": "\\",
+            ";": ";", "'": "'", ",": ",", ".": ".", "/": "/",
+            "`": "`", "!": "!", "@": "@", "#": "#", "$": "$",
+            "%": "%", "^": "^", "&": "&", "*": "*", "(": "(",
+            ")": ")", "_": "_", "+": "+", "{": "{", "}": "}",
+            "|": "|", ":": ":", "\"": "\"", "<": "<", ">": ">",
+            "?": "?", "~": "~"
         }
 
     def set_script(self, content):
@@ -83,7 +103,7 @@ class ScriptEngine(QThread):
                 idx += 1
                 continue
 
-            # 鼠标点击/按下/抬起
+            # 鼠标点击/按下/抬起/双击
             if line == "左键点击":
                 pyautogui.click()
                 idx += 1
@@ -92,6 +112,20 @@ class ScriptEngine(QThread):
                 pyautogui.rightClick()
                 idx += 1
                 continue
+            if line == "左键按下":
+                pyautogui.mouseDown()
+                idx += 1
+                continue
+            if line == "左键抬起":
+                pyautogui.mouseUp()
+                idx += 1
+                continue
+            if line == "鼠标双击":
+                pyautogui.doubleClick()
+                idx += 1
+                continue
+            
+            # 旧指令兼容
             if line == "按下":
                 pyautogui.mouseDown()
                 idx += 1
@@ -124,6 +158,24 @@ class ScriptEngine(QThread):
                 key_name = key_match.group(1)
                 actual_key = self.key_map.get(key_name, key_name)
                 pyautogui.press(actual_key)
+                idx += 1
+                continue
+            
+            # 键盘按下
+            key_down_match = self.key_down_re.match(line)
+            if key_down_match:
+                key_name = key_down_match.group(1)
+                actual_key = self.key_map.get(key_name, key_name)
+                pyautogui.keyDown(actual_key)
+                idx += 1
+                continue
+            
+            # 键盘抬起
+            key_up_match = self.key_up_re.match(line)
+            if key_up_match:
+                key_name = key_up_match.group(1)
+                actual_key = self.key_map.get(key_name, key_name)
+                pyautogui.keyUp(actual_key)
                 idx += 1
                 continue
 

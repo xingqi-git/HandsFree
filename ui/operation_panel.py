@@ -11,8 +11,9 @@ class OperationPanel(QWidget):
     def __init__(self):
         super().__init__()
         self.operation_list = [
-            "移动到", "左键点击", "右键点击", "输入", "按下", "抬起",
-            "键盘按键", "等待", "循环开始", "循环结束"
+            "移动到", "左键点击", "右键点击", "左键按下", "左键抬起",
+            "鼠标双击", "输入", "键盘按下", "键盘抬起", "键盘按键",
+            "等待", "循环开始", "循环结束"
         ]
         # 常用按键映射
         self.key_map = {
@@ -23,7 +24,25 @@ class OperationPanel(QWidget):
             "F1": "f1", "F2": "f2", "F3": "f3", "F4": "f4", "F5": "f5", "F6": "f6",
             "F7": "f7", "F8": "f8", "F9": "f9", "F10": "f10", "F11": "f11", "F12": "f12",
             "Home": "home", "End": "end", "Insert": "insert", "Esc": "esc",
-            "空格": "space"
+            "空格": "space",
+            # 字母A-Z
+            "A": "a", "B": "b", "C": "c", "D": "d", "E": "e",
+            "F": "f", "G": "g", "H": "h", "I": "i", "J": "j",
+            "K": "k", "L": "l", "M": "m", "N": "n", "O": "o",
+            "P": "p", "Q": "q", "R": "r", "S": "s", "T": "t",
+            "U": "u", "V": "v", "W": "w", "X": "x", "Y": "y",
+            "Z": "z",
+            # 数字0-9
+            "0": "0", "1": "1", "2": "2", "3": "3", "4": "4",
+            "5": "5", "6": "6", "7": "7", "8": "8", "9": "9",
+            # 常用符号
+            "=": "=", "-": "-", "[": "[", "]": "]", "\\": "\\",
+            ";": ";", "'": "'", ",": ",", ".": ".", "/": "/",
+            "`": "`", "!": "!", "@": "@", "#": "#", "$": "$",
+            "%": "%", "^": "^", "&": "&", "*": "*", "(": "(",
+            ")": ")", "_": "_", "+": "+", "{": "{", "}": "}",
+            "|": "|", ":": ":", "\"": "\"", "<": "<", ">": ">",
+            "?": "?", "~": "~"
         }
         self.loop_counter = 1
         self.loop_stack = []
@@ -59,6 +78,10 @@ class OperationPanel(QWidget):
             self._insert_loop_start()
         elif op_text == "键盘按键":
             self._insert_key_press()
+        elif op_text == "键盘按下":
+            self._insert_key_down()
+        elif op_text == "键盘抬起":
+            self._insert_key_up()
         elif op_text == "循环结束":
             self._insert_loop_end()
         else:
@@ -106,7 +129,7 @@ class OperationPanel(QWidget):
     def _insert_key_press(self):
         dialog = QDialog(self)
         dialog.setWindowTitle("选择按键")
-        dialog.setFixedSize(400, 350)
+        dialog.setFixedSize(600, 650)
         layout = QGridLayout(dialog)
 
         # 创建按键按钮
@@ -114,16 +137,59 @@ class OperationPanel(QWidget):
         row, col = 0, 0
         for key_name in keys:
             btn = QPushButton(key_name)
-            btn.setFixedHeight(40)
-            btn.clicked.connect(lambda checked, k=key_name: self._on_key_selected(dialog, k))
+            btn.setFixedHeight(35)
+            btn.setStyleSheet("QPushButton {font-size: 12px;}")
+            btn.clicked.connect(lambda checked, k=key_name: self._on_key_selected(dialog, k, "键盘按键"))
             layout.addWidget(btn, row, col)
             col += 1
-            if col >= 4:
+            if col >= 6:
+                col = 0
+                row += 1
+
+        dialog.exec()
+    
+    def _insert_key_down(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("选择按键")
+        dialog.setFixedSize(600, 650)
+        layout = QGridLayout(dialog)
+
+        keys = list(self.key_map.keys())
+        row, col = 0, 0
+        for key_name in keys:
+            btn = QPushButton(key_name)
+            btn.setFixedHeight(35)
+            btn.setStyleSheet("QPushButton {font-size: 12px;}")
+            btn.clicked.connect(lambda checked, k=key_name: self._on_key_selected(dialog, k, "键盘按下"))
+            layout.addWidget(btn, row, col)
+            col += 1
+            if col >= 6:
+                col = 0
+                row += 1
+
+        dialog.exec()
+    
+    def _insert_key_up(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("选择按键")
+        dialog.setFixedSize(600, 650)
+        layout = QGridLayout(dialog)
+
+        keys = list(self.key_map.keys())
+        row, col = 0, 0
+        for key_name in keys:
+            btn = QPushButton(key_name)
+            btn.setFixedHeight(35)
+            btn.setStyleSheet("QPushButton {font-size: 12px;}")
+            btn.clicked.connect(lambda checked, k=key_name: self._on_key_selected(dialog, k, "键盘抬起"))
+            layout.addWidget(btn, row, col)
+            col += 1
+            if col >= 6:
                 col = 0
                 row += 1
 
         dialog.exec()
 
-    def _on_key_selected(self, dialog, key_name):
-        self.operation_inserted.emit(f"键盘按键({key_name})")
+    def _on_key_selected(self, dialog, key_name, prefix):
+        self.operation_inserted.emit(f"{prefix}({key_name})")
         dialog.accept()
