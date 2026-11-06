@@ -64,6 +64,53 @@ ICON = os.path.join(SPECPATH, 'app.ico') if IS_WIN else None
 if ICON and not os.path.isfile(ICON):
     ICON = None
 
+# ---------- 安全裁剪（按路径/文件名匹配，平台无关写法） ----------
+# 本程序只用 QtWidgets，不用 QML/Quick/WebGL/EGL/打印/多媒体，故可删除
+_DROP_KEYWORDS = [
+    # 软件光栅化 / ANGLE（仅 Win，走原生显卡不需要）
+    'opengl32sw', 'libglesv2', 'libegl', 'd3dcompiler',
+    # QML / Quick 全家桶
+    'qt5quick', 'qt5qml', 'qt5qmlmodels', 'qt5quickwidgets', 'qt5quickshapes',
+    'qt5quickparticles', 'qt5quicktemplates2', 'qt5quickcontrols2',
+    # 网络/打印/SQL/多媒体/传感器
+    'qt5network', 'qt5printsupport', 'qt5sql', 'qt5multimedia',
+    'qt5multimediawidgets', 'qt5sensors', 'qt5websockets', 'qt5webchannel',
+    'qt5webengine', 'qt5webview', 'qt5positioning', 'qt5serialport',
+    'qt5test', 'qt5help',
+    # 用不到的平台插件（qwindows / xcb 保留，由白名单兜底）
+    'qminimal', 'qoffscreen', 'qwebgl',
+    # 用不到的图像格式（png/jpg/gif/bmp/ico 由 Qt 内建或保留）
+    '/imageformats/qtiff', '/imageformats/qwebp', '/imageformats/qpdf',
+    '/imageformats/qsvg',
+    # Qt 翻译文件（本软件界面为中文且自带文案）
+    '/translations/',
+    # bearer 网络连接插件（随 Qt5Network 一起无用）
+    '/bearer/',
+    # tkinter 运行时（Linux 已注入 mouseinfo 空壳，不需要真 tk）
+    'tcl86', 'tk86', '/tcl/', '/tk/', '/tkinter',
+]
+
+# PIL：pyautogui 截图只用核心，可删各种编解码器扩展
+_DROP_PIL = ['_avif', '_webp', '_tiff', '_imagingft', '_imagingmath',
+             '_imagingcms', '_imagingtk', '_psd', '_jpeg2k', '_xcb',
+             '_freetype', '_lcms', '_tkinter_finder']
+
+# 平台插件白名单：这些即使名字命中规则也绝不能删（xcb 是 Linux 命脉）
+_KEEP_SUBSTR = ['/platforms/qwindows', '/platforms/libqxcb',
+                '/platforms/qxcb', 'pynput']
+
+
+def _is_dropped(dest):
+    low = dest.replace('\\', '/').lower()
+    if any(k in low for k in _KEEP_SUBSTR):
+        return False
+    if '/pil/' in low:
+        base = low.rsplit('/', 1)[-1]
+        if any(base.startswith(tok) for tok in _DROP_PIL):
+            return True
+    return any(tok in low for tok in _DROP_KEYWORDS)
+
+
 a = Analysis(
     ['main.py'],
     pathex=[],
@@ -73,9 +120,19 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['tkinter', 'unittest', 'lib2to3', 'test',
+              'PyQt5.QtQml', 'PyQt5.QtQuick', 'PyQt5.QtQuickWidgets',
+              'PyQt5.QtWebEngine', 'PyQt5.QtWebEngineWidgets',
+              'PyQt5.QtMultimedia', 'PyQt5.QtSql', 'PyQt5.QtNetwork',
+              'PyQt5.QtSensors', 'PyQt5.QtPrintSupport'],
     noarchive=False,
 )
+
+before = len(a.binaries) + len(a.datas)
+a.binaries = [t for t in a.binaries if not _is_dropped(t[0])]
+a.datas = [t for t in a.datas if not _is_dropped(t[0])]
+removed = before - len(a.binaries) - len(a.datas)
+print('[spec] 裁剪移除 %d 个文件（保留 qwindows/xcb、pynput 后端）' % removed)
 
 pyz = PYZ(a.pure)
 
