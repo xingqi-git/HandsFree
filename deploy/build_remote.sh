@@ -48,6 +48,12 @@ else
     echo "$REQ_MD5" > "$VENV_DIR/.requirements.md5"
 fi
 
+echo "==> 清理旧的 build/dist ..."
+# 可能残留其他用户（如 root）打包产生的文件，普通 rm 失败时用 sudo
+if [ -e build ] || [ -e dist ]; then
+    rm -rf build dist 2>/dev/null || sudo rm -rf build dist
+fi
+
 echo "==> PyInstaller 打包..."
 # PyInstaller 官方在非 Windows 平台默认禁用 UPX（configure.py：已知兼容问题名单），
 # 不开此开关 Linux 产物只有 zlib 压缩、体积大一半。
