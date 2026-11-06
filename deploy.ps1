@@ -13,7 +13,7 @@ param(
 
 # ===== 默认值（交互输入时直接回车即用默认） =====
 $DefaultHost = "192.168.242.130"
-$DefaultUser = "root"
+$DefaultUser = "xingqi"
 # ==============================================
 
 $ErrorActionPreference = "Stop"
