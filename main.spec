@@ -110,7 +110,9 @@ DROP_BINARIES = (
     'opengl32sw', 'd3dcompiler_47', 'libegl', 'libglesv2',
     'qt5opengl', 'libqt5opengl',
     # QML/Quick 全家桶（由 qwebgl 平台插件牵入）
-    'qt5quick', 'qt5qml', 'qt5websockets',
+    # 注意 Linux 库名带 lib 前缀（libQt5Quick.so.5），两种写法都要匹配
+    'qt5quick', 'libqt5quick', 'qt5qml', 'libqt5qml',
+    'qt5websockets', 'libqt5websockets',
     # PIL 中本项目用不到的扩展及配套库（pyscreeze 截图只需 _imaging/_grab）
     '_avif', 'libavif', '_webp', 'libwebp',
     '_imagingft', 'freetype', '_imagingcms', '_imagingtk', '_imagingmorph',

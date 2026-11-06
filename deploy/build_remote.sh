@@ -53,7 +53,7 @@ echo "==> PyInstaller 打包..."
 # 不开此开关 Linux 产物只有 zlib 压缩、体积大一半。
 # 风险：UPX 压缩 .so 后在个别发行版上可能 dlopen 段错误；
 #       若打包产物在目标机器运行异常，删除下面这行重新打包即可回退。
-export PYINSTALLER_FORCE_UPX=1
+# export PYINSTALLER_FORCE_UPX=1
 pyinstaller main.spec --clean
 
 echo "==> 打包完成: $(pwd)/dist/HandsFree"
