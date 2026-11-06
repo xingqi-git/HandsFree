@@ -806,17 +806,41 @@ class MainWindow(QMainWindow):
         """内容或脚本列表变化后防抖 1.5 秒自动保存，避免程序异常退出丢失内容"""
         self._save_timer.start()
 
+    def _check_hotkey_finished(self):
+        """轮询热键线程是否收尾完成，完成则退出事件循环"""
+        from PyQt5.QtWidgets import QApplication as _QApp
+        if not self.hotkey_thread.isRunning():
+            _QApp.quit()
+        else:
+            # 继续等，直到 _close_deadline 兜底强制退出
+            now = time.monotonic()
+            if now >= getattr(self, '_close_deadline', now):
+                _QApp.quit()
+            else:
+                QTimer.singleShot(50, self._check_hotkey_finished)
+
     def closeEvent(self, event):
         """重写关闭事件，停止脚本引擎和热键线程并保存"""
         # 先停止并等待脚本引擎线程退出，避免 "QThread: Destroyed while thread is still running" 崩溃
         self.script_engine.stop()
         if self.script_engine.isRunning():
             self.script_engine.wait(3000)
-        # 停止热键线程
-        self.hotkey_thread.request_stop()
-        self.hotkey_thread.wait(2000)
-        if self.hotkey_thread.isRunning():
-            self.hotkey_thread.terminate()
-            self.hotkey_thread.wait(1000)
         self._save_scripts()
+
+        if IS_WINDOWS:
+            # Windows 热键线程是 PeekMessage 轮询，毫秒级即可干净退出，同步等待无妨
+            self.hotkey_thread.request_stop()
+            self.hotkey_thread.wait(500)
+            event.accept()
+            return
+
+        # Linux：pynput(XRecord) 关闭的 X11 往返清理约需 2~3 秒，不能在 GUI
+        # 线程同步 wait，否则点关闭后窗口卡 3 秒。立即隐藏窗口，热键线程在后台
+        # 自行收尾；禁止"最后一个窗口关闭即退出"，改为轮询线程结束后再退出。
+        from PyQt5.QtWidgets import QApplication as _QApp
+        self.hide()
+        _QApp.setQuitOnLastWindowClosed(False)
+        self.hotkey_thread.request_stop()
+        self._close_deadline = time.monotonic() + 3.0
+        QTimer.singleShot(50, self._check_hotkey_finished)
         event.accept()
