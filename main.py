@@ -3,10 +3,8 @@ import sys
 import os
 import tempfile
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-from PyQt5.QtWidgets import QApplication, QMessageBox
-from PyQt5.QtCore import QLockFile
 # 打包命令：pyinstaller main.spec --clean（Windows/Linux 通用，UPX 自动探测）
+# 注意：PyQt5 等所有导入都放在 main() 的 try 内，保证任何导入失败都能落盘日志
 
 LOG_PATH = os.path.join(tempfile.gettempdir(), "handsfree_error.log")
 
@@ -22,6 +20,8 @@ def main():
     import traceback
     sys.excepthook = lambda t, v, tb: _log_fatal(traceback.format_exception(t, v, tb))
     try:
+        from PyQt5.QtWidgets import QApplication, QMessageBox
+        from PyQt5.QtCore import QLockFile
         from ui.main_window import MainWindow
         if sys.platform.startswith('linux'):
             # Linux桌面环境适配
@@ -42,8 +42,12 @@ def main():
     except Exception:
         tb = traceback.format_exc()
         _log_fatal(tb)
-        QMessageBox.critical(None, "HandsFree 启动失败",
-                             "程序启动出错，日志已保存到：\n%s\n\n%s" % (LOG_PATH, tb[-1500:]))
+        try:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.critical(None, "HandsFree 启动失败",
+                                 "程序启动出错，日志已保存到：\n%s\n\n%s" % (LOG_PATH, tb[-1500:]))
+        except Exception:
+            pass
         sys.exit(1)
 
 if __name__ == "__main__":
