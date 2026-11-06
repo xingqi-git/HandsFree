@@ -54,8 +54,9 @@ scp $Tar "${Server}:handsfree_deploy.tar.gz"
 if ($LASTEXITCODE -ne 0) { throw "上传失败，请检查服务器地址/网络" }
 
 # 4. 远程解压并打包（第2次输密码）
+# sed 先去除可能的 \r（防止 Windows 换行符混入 .sh 导致 bash 报错）
 Write-Host "==> 远程打包中（首次会创建虚拟环境并安装依赖，较慢）..." -ForegroundColor Cyan
-$Cmd = "mkdir -p ~/$BuildDir && tar -xzf ~/handsfree_deploy.tar.gz -C ~/$BuildDir --overwrite && cd ~/$BuildDir && bash deploy/build_remote.sh"
+$Cmd = "mkdir -p ~/$BuildDir && tar -xzf ~/handsfree_deploy.tar.gz -C ~/$BuildDir --overwrite && cd ~/$BuildDir && sed -i 's/\r$//' deploy/build_remote.sh && bash deploy/build_remote.sh"
 ssh $Server $Cmd
 if ($LASTEXITCODE -ne 0) { throw "远程打包失败" }
 
