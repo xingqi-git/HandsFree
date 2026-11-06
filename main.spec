@@ -54,7 +54,10 @@ hiddenimports = ['pyperclip', 'pynput', 'pynput.keyboard', 'pynput.mouse']
 if IS_WIN:
     hiddenimports += ['pynput.keyboard._win32', 'pynput.mouse._win32']
 else:
-    hiddenimports += ['pynput.keyboard._x11', 'pynput.mouse._x11']
+    # pynput 新版(1.8+) Linux 后端由 _x11 改名为 _xorg，两个都收以兼容
+    hiddenimports += ['pynput.keyboard._x11', 'pynput.mouse._x11',
+                      'pynput.keyboard._xorg', 'pynput.mouse._xorg',
+                      'pynput._util.xorg']
 
 # ---------- 可选图标 ----------
 ICON = os.path.join(SPECPATH, 'app.ico') if IS_WIN else None
