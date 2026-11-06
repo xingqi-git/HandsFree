@@ -427,15 +427,20 @@ class GlobalHotkeyThread(QThread):
 
     def _run_linux(self):
         """Linux 平台：使用 pynput 监听全局快捷键"""
+        import logging
+        _log = logging.getLogger("handsfree")
         try:
             from pynput import keyboard
-        except ImportError:
+        except ImportError as e:
+            _log.error("全局热键: 无法导入 pynput: %s", e)
             self.register_result.emit(False, False)
             return
 
         start_key = _pynput_key(self.start_key)
         stop_key = _pynput_key(self.stop_key)
-        self.register_result.emit(start_key is not None, stop_key is not None)
+        if start_key is None or stop_key is None:
+            _log.error("全局热键: 按键解析失败 start=%s(%r) stop=%s(%r)",
+                       self.start_key, start_key, self.stop_key, stop_key)
 
         def on_press(key):
             try:
@@ -446,8 +451,20 @@ class GlobalHotkeyThread(QThread):
             except Exception:
                 pass
 
-        self._listener = keyboard.Listener(on_press=on_press)
-        self._listener.start()
+        # 必须先成功创建并启动 Listener 再上报注册结果；
+        # Listener()/start() 失败（X 授权等）时上报失败，避免主界面误判或死等
+        try:
+            self._listener = keyboard.Listener(on_press=on_press)
+            self._listener.start()
+            if not self._listener.is_alive():
+                raise RuntimeError("Listener 启动后立即退出")
+        except Exception as e:
+            _log.error("全局热键: pynput Listener 启动失败: %r", e, exc_info=True)
+            self.register_result.emit(False, False)
+            return
+
+        _log.info("全局热键注册成功: start=%s stop=%s", self.start_key, self.stop_key)
+        self.register_result.emit(start_key is not None, stop_key is not None)
         self._listener.join()
 
 
