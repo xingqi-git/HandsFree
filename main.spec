@@ -55,9 +55,10 @@ else:
 USE_UPX = UPX_DIR is not None
 
 # Windows 下这些 DLL 压缩后可能引发崩溃/杀软误报，不参与 UPX
-UPX_EXCLUDE = ['vcruntime140.dll', 'vcruntime140_1.dll',
-               'd3dcompiler_47.dll', 'libegl.dll', 'libEGL.dll',
-               'libglesv2.dll', 'libGLESv2.dll', 'opengl32sw.dll']
+UPX_EXCLUDE = ['vcruntime140.dll', 'vcruntime140_1.dll']
+
+# Linux 上对 .so 做 strip（很多发行版 .so 带完整符号表，可减 10-30%）
+USE_STRIP = (not IS_WIN) and shutil.which('strip') is not None
 
 # ---------- 依赖裁剪 ----------
 excludes = [
@@ -103,22 +104,41 @@ a = Analysis(
 
 
 # ---------- 二进制/资源二次裁剪 ----------
+# 纯 Widgets 应用用不到的组件，按文件名（去扩展名小写）前缀匹配删除
+DROP_BINARIES = (
+    # OpenGL / ANGLE / 软件 GL：Qt 为动态 GL 构建，纯光栅界面不加载
+    'opengl32sw', 'd3dcompiler_47', 'libegl', 'libglesv2',
+    'qt5opengl', 'libqt5opengl',
+    # QML/Quick 全家桶（由 qwebgl 平台插件牵入）
+    'qt5quick', 'qt5qml', 'qt5websockets',
+    # PIL 中本项目用不到的扩展及配套库（pyscreeze 截图只需 _imaging/_grab）
+    '_avif', 'libavif', '_webp', 'libwebp',
+    '_imagingft', 'freetype', '_imagingcms', '_imagingtk', '_imagingmorph',
+)
+
+
 def _keep(item):
-    """True=保留。过滤 Qt 翻译、QML/WebEngine 残留、非必需插件"""
+    """True=保留。过滤翻译文件、非当前平台插件、无用 Qt 组件"""
     name = item[0].replace('\\', '/').lower()
+    base = os.path.splitext(os.path.basename(name))[0].lower()
     if '/translations/' in name:
         return False
-    for bad in ('webengine', '/qml/', 'qtquick', 'designer'):
+    for bad in ('webengine', '/qml/', 'designer'):
         if bad in name:
             return False
+    # 平台插件只保留必需的一个（qminimal/qoffscreen/qwebgl 全砍）
+    if '/platforms/' in name:
+        return base in (('qwindows',) if IS_WIN else ('qxcb',))
+    # GL 积分插件（Linux xcb 下只有 GL 渲染才需要）
+    if 'glintegrations' in name:
+        return False
     # imageformats 只保留最常用三种（PNG 由 QtGui 内建支持）
     if '/imageformats/' in name:
-        base = os.path.splitext(os.path.basename(name))[0].lower()
         return base in ('qgif', 'qico', 'qjpeg')
-    # 本项目无 SVG 图标：去掉 iconengines 插件及 Qt5Svg 库本体
+    # 本项目无 SVG 图标：去掉 iconengines 插件
     if '/iconengines/' in name:
         return False
-    if os.path.basename(name).startswith(('qt5svg', 'libqt5svg')):
+    if base.startswith(DROP_BINARIES):
         return False
     return True
 
@@ -137,7 +157,7 @@ exe = EXE(
     name=APP_NAME,
     debug=False,
     bootloader_ignore_signals=False,
-    strip=False,
+    strip=USE_STRIP,
     upx=USE_UPX,
     upx_exclude=UPX_EXCLUDE,
     runtime_tmpdir=None,

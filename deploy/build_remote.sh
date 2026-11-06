@@ -40,7 +40,11 @@ if [ -f "$VENV_DIR/.requirements.md5" ] && [ "$(cat "$VENV_DIR/.requirements.md5
     echo "==> 依赖无变化，跳过安装"
 else
     echo "==> 安装依赖..."
-    pip install -q -r requirements.txt "$PI_SPECIFIER"
+    pip install -q -r requirements.txt
+    # Python 3.7 与 requirements 中的 pyinstaller>=6.0.0 冲突，单独降级安装
+    if [ "$PI_SPECIFIER" = "pyinstaller<6" ]; then
+        pip install -q "pyinstaller<6"
+    fi
     echo "$REQ_MD5" > "$VENV_DIR/.requirements.md5"
 fi
 
