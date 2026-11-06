@@ -6,6 +6,7 @@ from PyQt5.QtGui import QFont
 
 class ScriptPanel(QWidget):
     load_script = pyqtSignal(str)
+    scripts_changed = pyqtSignal()  # 脚本列表增删改名时发出，用于自动保存
     def __init__(self):
         super().__init__()
         self.script_dict = {}
@@ -84,6 +85,26 @@ class ScriptPanel(QWidget):
         self.script_list.setCurrentItem(item)
         self.script_list.blockSignals(False)
 
+        self.scripts_changed.emit()
+
+    def ensure_default_script(self):
+        """列表为空时自动创建默认脚本，无需手动新建即可开始编写"""
+        if self.script_list.count() > 0:
+            return
+        default_name = f"脚本{self.script_counter}"
+        self.script_counter += 1
+        self.script_dict[default_name] = ""
+
+        item = QListWidgetItem(default_name)
+        item.setTextAlignment(Qt.AlignCenter)
+        item.setData(Qt.UserRole, default_name)
+        item.setFlags(item.flags() | Qt.ItemIsEditable)
+
+        self.script_list.blockSignals(True)
+        self.script_list.addItem(item)
+        self.script_list.setCurrentItem(item)
+        self.script_list.blockSignals(False)
+
     def _on_delete_script(self):
         current_item = self.script_list.currentItem()
         if not current_item:
@@ -112,6 +133,11 @@ class ScriptPanel(QWidget):
         # 选中相邻的项（如果还有的话）
         if self.script_list.count() > 0:
             self.script_list.setCurrentRow(max(0, row - 1))
+        else:
+            # 删光了脚本则自动补一个默认脚本
+            self.ensure_default_script()
+
+        self.scripts_changed.emit()
 
     def _on_script_selected(self, current):
         # # 保存上一个脚本的内容
@@ -153,6 +179,7 @@ class ScriptPanel(QWidget):
             self.script_dict[new_name] = content
             # 2. 更新item的Data为新名称，方便下次修改
             item.setData(Qt.ItemDataRole.UserRole, new_name)
+            self.scripts_changed.emit()
 
     def update_current_script(self, content):
         current_item = self.script_list.currentItem()

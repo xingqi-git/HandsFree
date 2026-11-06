@@ -3,6 +3,9 @@ import pyautogui
 import time
 import re
 
+# 关闭 pyautogui 防呆机制，避免鼠标碰到屏幕左上角时抛 FailSafeException 中止脚本
+pyautogui.FAILSAFE = False
+
 
 class ScriptEngine(QThread):
     run_finished = pyqtSignal()
@@ -17,7 +20,7 @@ class ScriptEngine(QThread):
         self._increment_states = {}
         # 指令正则匹配
         self.move_re = re.compile(r"鼠标移动到\((\d+),(\d+)\)")
-        self.wait_re = re.compile(r"等待\((\d+)秒\)")
+        self.wait_re = re.compile(r"等待\(([\d.]+)秒\)")
         self.input_re = re.compile(r"输入\((.*?)\)")
         self.key_re = re.compile(r"键盘按键\((.*?)\)")
         self.key_down_re = re.compile(r"键盘按下\((.*?)\)")
@@ -65,13 +68,71 @@ class ScriptEngine(QThread):
     def stop(self):
         self._stop_flag = True
 
+    def validate_script(self, content=None):
+        """运行前静态检查脚本，返回错误列表（含行号），无错误返回空列表"""
+        if content is None:
+            content = self.script_content
+        errors = []
+        loop_stack = []  # (循环编号, 行号) 栈，用于检查配对
+        simple_cmds = ('左键点击', '右键点击', '左键按下', '左键抬起', '鼠标双击', '按下', '抬起')
+
+        for i, raw in enumerate(content.splitlines(), start=1):
+            line = raw.strip()
+            if not line or line.startswith('#'):
+                continue
+
+            if self.move_re.match(line):
+                continue
+            if line in simple_cmds:
+                continue
+            if self.wait_re.match(line):
+                continue
+            if self.input_re.match(line):
+                continue
+
+            key_match = (self.key_re.match(line) or self.key_down_re.match(line)
+                         or self.key_up_re.match(line))
+            if key_match:
+                if not key_match.group(1):
+                    errors.append(f"第 {i} 行：{line.split('(')[0]} 的按键名为空")
+                continue
+
+            loop_start = self.loop_start_re.match(line)
+            if loop_start:
+                loop_stack.append((loop_start.group(1), i))
+                continue
+
+            loop_end = self.loop_end_re.match(line)
+            if loop_end:
+                if not loop_stack:
+                    errors.append(f"第 {i} 行：结束循环{loop_end.group(1)}没有对应的循环开始")
+                else:
+                    start_num, _start_line = loop_stack.pop()
+                    if start_num != loop_end.group(1):
+                        errors.append(
+                            f"第 {i} 行：结束循环{loop_end.group(1)}与最近的循环开始{start_num}编号不匹配")
+                continue
+
+            errors.append(f"第 {i} 行：未知指令：{line}")
+
+        # 剩余未闭合的循环开始
+        for num, line_no in loop_stack:
+            errors.append(f"第 {line_no} 行：循环开始{num}没有对应的结束循环")
+
+        return errors
+
     def run(self):
         self._stop_flag = False
         try:
-            lines = [line.strip() for line in self.script_content.splitlines() if line.strip()]
-            if not lines:
+            # 记录每行指令在原脚本中的行号（1 开始），用于错误提示
+            entries = [(i + 1, line.strip()) for i, line in enumerate(self.script_content.splitlines())
+                       if line.strip() and not line.strip().startswith('#')]
+            if not entries:
                 self.run_finished.emit()
                 return
+
+            lines = [e[1] for e in entries]
+            line_nums = [e[0] for e in entries]
 
             total_run = self.run_count if self.run_count > 0 else float('inf')
             current_run = 0
@@ -79,7 +140,7 @@ class ScriptEngine(QThread):
             while current_run < total_run and not self._stop_flag:
                 # 每次运行开始时，重置所有递增状态
                 self._increment_states = {}
-                self._execute_block(lines)
+                self._execute_block(lines, line_nums)
                 current_run += 1
 
             if not self._stop_flag:
@@ -88,7 +149,7 @@ class ScriptEngine(QThread):
         except Exception as e:
             self.run_error.emit(str(e))
 
-    def _execute_block(self, lines, start_idx=0):
+    def _execute_block(self, lines, line_nums, start_idx=0):
         idx = start_idx
         line_count = len(lines)
 
@@ -138,8 +199,8 @@ class ScriptEngine(QThread):
             # 等待
             wait_match = self.wait_re.match(line)
             if wait_match:
-                seconds = int(wait_match.group(1))
-                time.sleep(seconds)
+                seconds = float(wait_match.group(1))
+                self._wait(seconds)
                 idx += 1
                 continue
 
@@ -148,7 +209,7 @@ class ScriptEngine(QThread):
             if input_match:
                 text = input_match.group(1)
                 processed_text = self._process_increment(text, idx)
-                pyautogui.typewrite(processed_text)
+                self._type_text(processed_text)
                 idx += 1
                 continue
 
@@ -186,11 +247,11 @@ class ScriptEngine(QThread):
                 loop_count = int(loop_start_match.group(2))
                 end_idx = self._find_loop_end(lines, loop_num, idx + 1)
                 if end_idx == -1:
-                    raise Exception(f"未找到循环{loop_num}对应的结束循环")
+                    raise Exception(f"第 {line_nums[idx]} 行：未找到循环{loop_num}对应的结束循环")
                 for _ in range(loop_count):
                     if self._stop_flag:
                         break
-                    self._execute_block(lines, idx + 1)
+                    self._execute_block(lines, line_nums, idx + 1)
                 idx = end_idx + 1
                 continue
 
@@ -199,9 +260,29 @@ class ScriptEngine(QThread):
                 idx += 1
                 return idx
 
-            raise Exception(f"未知指令：{line}")
+            raise Exception(f"第 {line_nums[idx]} 行：未知指令：{line}")
 
         return idx
+
+    def _wait(self, seconds):
+        """可中断等待：每 0.1 秒检查一次停止标志，避免长等待期间按 F9 无响应"""
+        remaining = seconds
+        while remaining > 0 and not self._stop_flag:
+            time.sleep(min(0.1, remaining))
+            remaining -= 0.1
+
+    def _type_text(self, text):
+        """输入文本：纯 ASCII 用 typewrite，含中文等非 ASCII 字符走剪贴板粘贴"""
+        if all(ord(c) < 128 for c in text):
+            pyautogui.typewrite(text)
+            return
+        try:
+            import pyperclip
+            pyperclip.copy(text)
+            pyautogui.hotkey('ctrl', 'v')
+        except Exception:
+            # pyperclip 不可用时退化为只输入 ASCII 部分
+            pyautogui.typewrite(''.join(c for c in text if ord(c) < 128))
 
     def _process_increment(self, text, line_idx):
         """处理文本中的递增标记"""
