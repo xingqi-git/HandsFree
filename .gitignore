@@ -32,6 +32,8 @@ MANIFEST
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+# main.spec 是手动维护的打包配置，需要纳入版本库（服务器打包依赖它）
+!main.spec
 
 # Installer logs
 pip-log.txt

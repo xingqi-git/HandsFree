@@ -45,6 +45,6 @@ else
 fi
 
 echo "==> PyInstaller 打包..."
-pyinstaller --clean -F -w -n HandsFree main.py
+pyinstaller main.spec --clean
 
 echo "==> 打包完成: $(pwd)/dist/HandsFree"
