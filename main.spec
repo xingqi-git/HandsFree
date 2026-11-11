@@ -50,14 +50,19 @@ else:
 USE_STRIP = (not IS_WIN) and shutil.which('strip') is not None
 
 # ---------- 延迟导入的平台后端 ----------
-hiddenimports = ['pyperclip', 'pynput', 'pynput.keyboard', 'pynput.mouse']
+hiddenimports = ['pyperclip']
 if IS_WIN:
-    hiddenimports += ['pynput.keyboard._win32', 'pynput.mouse._win32']
+    # Windows 热键用 ctypes，但保留 pynput 以防其他引用
+    hiddenimports += ['pynput', 'pynput.keyboard', 'pynput.mouse',
+                      'pynput.keyboard._win32', 'pynput.mouse._win32']
 else:
-    # pynput 新版(1.8+) Linux 后端由 _x11 改名为 _xorg，两个都收以兼容
-    hiddenimports += ['pynput.keyboard._x11', 'pynput.mouse._x11',
-                      'pynput.keyboard._xorg', 'pynput.mouse._xorg',
-                      'pynput._util.xorg']
+    # Linux 全局热键改用 python-xlib 的 XGrabKey（不再用 pynput/XRecord，
+    # 后者在统信上 XRecordEnableContext 段错误）。显式列出 Xlib 子模块。
+    hiddenimports += [
+        'Xlib', 'Xlib.display', 'Xlib.X', 'Xlib.XK', 'Xlib.keysymdef',
+        'Xlib.protocol.event', 'Xlib.ext', 'Xlib.support',
+        'Xlib.xobject', 'Xlib.xobject.drawable',
+    ]
 
 # ---------- 可选图标 ----------
 ICON = os.path.join(SPECPATH, 'app.ico') if IS_WIN else None
@@ -96,8 +101,7 @@ _DROP_PIL = ['_avif', '_webp', '_tiff', '_imagingft', '_imagingmath',
              '_freetype', '_lcms', '_tkinter_finder']
 
 # 平台插件白名单：这些即使名字命中规则也绝不能删（xcb 是 Linux 命脉）
-_KEEP_SUBSTR = ['/platforms/qwindows', '/platforms/libqxcb',
-                '/platforms/qxcb', 'pynput']
+_KEEP_SUBSTR = ['/platforms/qwindows', '/platforms/libqxcb', '/platforms/qxcb']
 
 
 def _is_dropped(dest):
@@ -111,6 +115,15 @@ def _is_dropped(dest):
     return any(tok in low for tok in _DROP_KEYWORDS)
 
 
+_excludes = ['tkinter', 'unittest', 'lib2to3', 'test',
+             'PyQt5.QtQml', 'PyQt5.QtQuick', 'PyQt5.QtQuickWidgets',
+             'PyQt5.QtWebEngine', 'PyQt5.QtWebEngineWidgets',
+             'PyQt5.QtMultimedia', 'PyQt5.QtSql', 'PyQt5.QtNetwork',
+             'PyQt5.QtSensors', 'PyQt5.QtPrintSupport']
+if not IS_WIN:
+    # Linux 不再使用 pynput，整体排除（Windows 暂保留）
+    _excludes += ['pynput']
+
 a = Analysis(
     ['main.py'],
     pathex=[],
@@ -120,11 +133,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['tkinter', 'unittest', 'lib2to3', 'test',
-              'PyQt5.QtQml', 'PyQt5.QtQuick', 'PyQt5.QtQuickWidgets',
-              'PyQt5.QtWebEngine', 'PyQt5.QtWebEngineWidgets',
-              'PyQt5.QtMultimedia', 'PyQt5.QtSql', 'PyQt5.QtNetwork',
-              'PyQt5.QtSensors', 'PyQt5.QtPrintSupport'],
+    excludes=_excludes,
     noarchive=False,
 )
 
@@ -132,7 +141,7 @@ before = len(a.binaries) + len(a.datas)
 a.binaries = [t for t in a.binaries if not _is_dropped(t[0])]
 a.datas = [t for t in a.datas if not _is_dropped(t[0])]
 removed = before - len(a.binaries) - len(a.datas)
-print('[spec] 裁剪移除 %d 个文件（保留 qwindows/xcb、pynput 后端）' % removed)
+print('[spec] 裁剪移除 %d 个文件（保留 qwindows/xcb 平台插件）' % removed)
 
 pyz = PYZ(a.pure)
 

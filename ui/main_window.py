@@ -76,33 +76,40 @@ def _parse_hotkey(key_str):
     return vk, win_mods
 
 
-def _pynput_key(key_str):
-    """把 Qt 风格按键字符串转换为 pynput 按键对象（仅单键，忽略修饰键），失败返回 None"""
-    try:
-        from pynput import keyboard
-    except ImportError:
-        return None
-    token = QKeySequence(key_str).toString().split('+')[-1].lower()
-    fkeys = {f"f{i}": getattr(keyboard.Key, f"f{i}") for i in range(1, 21)}
-    named = {
-        "esc": keyboard.Key.esc, "escape": keyboard.Key.esc,
-        "enter": keyboard.Key.enter, "return": keyboard.Key.enter,
-        "tab": keyboard.Key.tab, "space": keyboard.Key.space,
-        "backspace": keyboard.Key.backspace, "delete": keyboard.Key.delete,
-        "insert": keyboard.Key.insert, "home": keyboard.Key.home,
-        "end": keyboard.Key.end, "pageup": keyboard.Key.page_up,
-        "pagedown": keyboard.Key.page_down, "up": keyboard.Key.up,
-        "down": keyboard.Key.down, "left": keyboard.Key.left,
-        "right": keyboard.Key.right, "printscreen": keyboard.Key.print_screen,
-        "pause": keyboard.Key.pause, "capslock": keyboard.Key.caps_lock,
+def _xlib_keysym_mods(key_str):
+    """把 Qt 风格按键字符串解析为 (X11 keysym, X11 基础修饰掩码)，失败返回 (None, 0)"""
+    from Xlib import XK
+    from Xlib.X import ControlMask, ShiftMask, Mod1Mask, Mod4Mask
+    seq = QKeySequence(key_str)
+    if seq.count() == 0:
+        return None, 0
+    combo = seq[0]
+    mod_mask = int(Qt.SHIFT | Qt.CTRL | Qt.ALT | Qt.META)
+    mods = combo & mod_mask
+    token = QKeySequence(combo & ~mod_mask).toString().lower()
+
+    special = {
+        "esc": "Escape", "escape": "Escape", "enter": "Return", "return": "Return",
+        "tab": "Tab", "space": "space", "backspace": "BackSpace",
+        "delete": "Delete", "insert": "Insert", "home": "Home", "end": "End",
+        "pageup": "Page_Up", "pagedown": "Page_Down",
+        "up": "Up", "down": "Down", "left": "Left", "right": "Right",
+        "printscreen": "Print", "pause": "Pause", "capslock": "Caps_Lock",
     }
-    if token in fkeys:
-        return fkeys[token]
-    if token in named:
-        return named[token]
-    if len(token) == 1:
-        return keyboard.KeyCode.from_char(token)
-    return None
+    name = special.get(token, token.upper() if token.startswith("f") else token)
+    keysym = XK.string_to_keysym(name)
+    if keysym == 0:
+        return None, 0
+    base = 0
+    if mods & int(Qt.SHIFT):
+        base |= ShiftMask
+    if mods & int(Qt.CTRL):
+        base |= ControlMask
+    if mods & int(Qt.ALT):
+        base |= Mod1Mask
+    if mods & int(Qt.META):
+        base |= Mod4Mask
+    return keysym, base
 
 
 def _load_hotkey_config():
@@ -371,16 +378,12 @@ class GlobalHotkeyThread(QThread):
             self._run_linux()
 
     def request_stop(self):
-        """请求退出热键监听：置退出标志并投递 WM_QUIT"""
+        """请求退出热键监听：置退出标志；Windows 额外投递 WM_QUIT 唤醒消息循环"""
+        self._quit_requested = True
         if IS_WINDOWS:
-            self._quit_requested = True
             if self._thread_id:
                 WM_QUIT = 0x0012
                 ctypes.windll.user32.PostThreadMessageW(self._thread_id, WM_QUIT, 0, 0)
-        else:
-            listener = getattr(self, '_listener', None)
-            if listener:
-                listener.stop()
 
     def _run_windows(self):
         """Windows 平台：使用 ctypes + RegisterHotKey"""
@@ -426,46 +429,73 @@ class GlobalHotkeyThread(QThread):
             self._thread_id = None
 
     def _run_linux(self):
-        """Linux 平台：使用 pynput 监听全局快捷键"""
+        """Linux 平台：使用 python-xlib XGrabKey 注册全局热键（不用 pynput/XRecord）"""
         import logging
         _log = logging.getLogger("handsfree")
         try:
-            from pynput import keyboard
+            from Xlib import display as xdisplay
+            from Xlib.X import (GrabModeAsync, KeyPress, LockMask, Mod2Mask,
+                               Mod3Mask, Mod4Mask, Mod5Mask, CurrentTime)
         except ImportError as e:
-            _log.error("全局热键: 无法导入 pynput: %s", e)
+            _log.error("全局热键: 无法导入 python-xlib: %s", e)
             self.register_result.emit(False, False)
             return
 
-        start_key = _pynput_key(self.start_key)
-        stop_key = _pynput_key(self.stop_key)
-        if start_key is None or stop_key is None:
+        start_ks, start_base = _xlib_keysym_mods(self.start_key)
+        stop_ks, stop_base = _xlib_keysym_mods(self.stop_key)
+        if start_ks is None or stop_ks is None:
             _log.error("全局热键: 按键解析失败 start=%s(%r) stop=%s(%r)",
-                       self.start_key, start_key, self.stop_key, stop_key)
-
-        def on_press(key):
-            try:
-                if start_key is not None and key == start_key:
-                    self.start_pressed.emit()
-                elif stop_key is not None and key == stop_key:
-                    self.stop_pressed.emit()
-            except Exception:
-                pass
-
-        # 必须先成功创建并启动 Listener 再上报注册结果；
-        # Listener()/start() 失败（X 授权等）时上报失败，避免主界面误判或死等
-        try:
-            self._listener = keyboard.Listener(on_press=on_press)
-            self._listener.start()
-            if not self._listener.is_alive():
-                raise RuntimeError("Listener 启动后立即退出")
-        except Exception as e:
-            _log.error("全局热键: pynput Listener 启动失败: %r", e, exc_info=True)
+                       self.start_key, start_ks, self.stop_key, stop_ks)
             self.register_result.emit(False, False)
             return
 
+        d = xdisplay.Display()
+        root = d.screen().root
+        start_code = d.keysym_to_keycode(start_ks)
+        stop_code = d.keysym_to_keycode(stop_ks)
+
+        # 兼顾 CapsLock / NumLock(Mod2) 及常见额外修饰(Mod3/Mod5)，
+        # 对每种状态组合都抓取，保证这些开关打开时热键仍有效
+        extra = [0, LockMask, Mod2Mask, LockMask | Mod2Mask,
+                 Mod3Mask, Mod5Mask, Mod2Mask | Mod3Mask, Mod2Mask | Mod5Mask]
+        try:
+            for extra_mask in extra:
+                root.grab_key(start_code, start_base | extra_mask,
+                              1, GrabModeAsync, GrabModeAsync)
+                root.grab_key(stop_code, stop_base | extra_mask,
+                              1, GrabModeAsync, GrabModeAsync)
+        except Exception as e:
+            _log.error("全局热键: XGrabKey 失败: %r", e, exc_info=True)
+            self.register_result.emit(False, False)
+            d.close()
+            return
+
+        d.sync()
+        # 用户可指定修饰位：Shift(0x01) | Ctrl(0x04) | Alt/Mod1(0x08) | Meta/Mod4
+        user_mod_mask = 0x01 | 0x04 | 0x08 | Mod4Mask
         _log.info("全局热键注册成功: start=%s stop=%s", self.start_key, self.stop_key)
-        self.register_result.emit(start_key is not None, stop_key is not None)
-        self._listener.join()
+        self.register_result.emit(True, True)
+
+        # 非阻塞轮询事件队列，退出延迟仅取决于轮询间隔（~50ms），
+        # 单 Display 单线程，彻底避开 XRecord 多线程段错误
+        try:
+            while not self._quit_requested:
+                if root.display.pending_events():
+                    ev = root.display.next_event()
+                    if ev.type == KeyPress:
+                        umod = ev.state & user_mod_mask
+                        if ev.detail == start_code and umod == (start_base & user_mod_mask):
+                            self.start_pressed.emit()
+                        elif ev.detail == stop_code and umod == (stop_base & user_mod_mask):
+                            self.stop_pressed.emit()
+                else:
+                    time.sleep(0.05)
+        finally:
+            for extra_mask in extra:
+                root.ungrab_key(start_code, start_base | extra_mask, CurrentTime)
+                root.ungrab_key(stop_code, stop_base | extra_mask, CurrentTime)
+            d.sync()
+            d.close()
 
 
 class HotkeySettingsDialog(QDialog):
@@ -806,19 +836,6 @@ class MainWindow(QMainWindow):
         """内容或脚本列表变化后防抖 1.5 秒自动保存，避免程序异常退出丢失内容"""
         self._save_timer.start()
 
-    def _check_hotkey_finished(self):
-        """轮询热键线程是否收尾完成，完成则退出事件循环"""
-        from PyQt5.QtWidgets import QApplication as _QApp
-        if not self.hotkey_thread.isRunning():
-            _QApp.quit()
-        else:
-            # 继续等，直到 _close_deadline 兜底强制退出
-            now = time.monotonic()
-            if now >= getattr(self, '_close_deadline', now):
-                _QApp.quit()
-            else:
-                QTimer.singleShot(50, self._check_hotkey_finished)
-
     def closeEvent(self, event):
         """重写关闭事件，停止脚本引擎和热键线程并保存"""
         # 先停止并等待脚本引擎线程退出，避免 "QThread: Destroyed while thread is still running" 崩溃
@@ -826,21 +843,8 @@ class MainWindow(QMainWindow):
         if self.script_engine.isRunning():
             self.script_engine.wait(3000)
         self._save_scripts()
-
-        if IS_WINDOWS:
-            # Windows 热键线程是 PeekMessage 轮询，毫秒级即可干净退出，同步等待无妨
-            self.hotkey_thread.request_stop()
-            self.hotkey_thread.wait(500)
-            event.accept()
-            return
-
-        # Linux：pynput(XRecord) 关闭的 X11 往返清理约需 2~3 秒，不能在 GUI
-        # 线程同步 wait，否则点关闭后窗口卡 3 秒。立即隐藏窗口，热键线程在后台
-        # 自行收尾；禁止"最后一个窗口关闭即退出"，改为轮询线程结束后再退出。
-        from PyQt5.QtWidgets import QApplication as _QApp
-        self.hide()
-        _QApp.setQuitOnLastWindowClosed(False)
+        # 停止热键线程并等待其干净退出：
+        #   Windows 为 PeekMessage 轮询，Linux 为 50ms 轮询，均为毫秒级退出
         self.hotkey_thread.request_stop()
-        self._close_deadline = time.monotonic() + 3.0
-        QTimer.singleShot(50, self._check_hotkey_finished)
+        self.hotkey_thread.wait(1000)
         event.accept()

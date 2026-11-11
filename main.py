@@ -71,6 +71,92 @@ if sys.platform.startswith("linux"):
         _stub.mouseInfo = lambda *a, **k: None
         sys.modules["mouseinfo"] = _stub
 
+
+def _setup_linux_inputmethod():
+    """
+    统信等 Linux 桌面默认使用 fcitx，而 PyQt5 wheel/PyInstaller 只内置
+    ibus/compose 插件且插件搜索被限制在包内，导致编辑区无法唤起输入法。
+    做法：在系统 Qt 插件目录里找 fcitx/fcitx5/ibus 的 inputmethods 插件，
+    建一个只含 inputmethods 的临时插件根目录并加入 QT_PLUGIN_PATH，
+    同时设置 QT_IM_MODULE，让 Qt 加载系统输入法插件（不影响其他插件）。
+    必须在创建 QApplication 之前调用。
+    """
+    import glob
+
+    def _im_module():
+        m = os.environ.get("QT_IM_MODULE")
+        if m:
+            return m
+        # 探测当前运行的输入法守护进程
+        found = ""
+        try:
+            procs = " ".join(os.listdir("/proc"))
+        except Exception:
+            procs = ""
+        try:
+            import subprocess
+            out = subprocess.run(["pgrep", "-a", "fcitx"], capture_output=True,
+                                 text=True, timeout=2).stdout
+        except Exception:
+            out = ""
+        if "fcitx5" in out or os.path.isdir("/usr/lib/fcitx5"):
+            found = "fcitx"
+        elif "fcitx" in out or os.path.isdir("/usr/lib/fcitx"):
+            found = "fcitx"
+        elif "ibus-daemon" in out or procs and "ibus" in procs:
+            found = "ibus"
+        return found
+
+    module = _im_module()
+    if not module:
+        log.info("未检测到 Linux 输入法模块，跳过输入法适配")
+        return
+
+    # 系统 Qt 插件搜索根（多架构目录都覆盖）
+    roots = [
+        "/usr/lib/qt/plugins", "/usr/lib/qt5/plugins",
+        "/usr/lib/x86_64-linux-gnu/qt5/plugins",
+        "/usr/lib64/qt5/plugins", "/usr/lib/qt/plugins/platforminputcontexts",
+    ]
+    # 插件名：fcitx 与 fcitx5 的插件都叫 libfcitxplatforminputcontextplugin.so
+    want = module
+    plugin_files = []
+    for r in roots:
+        for sub in ("inputmethods", "platforminputcontexts"):
+            d = os.path.join(r, sub) if not r.endswith("platforminputcontexts") else r
+            for so in glob.glob(os.path.join(d, "*.so")):
+                base = os.path.basename(so).lower()
+                hit = ((want.startswith("fcitx") and "fcitx" in base) or
+                       (want == "ibus" and base.startswith("libibus")))
+                if hit and so not in plugin_files:
+                    plugin_files.append(so)
+
+    if not plugin_files:
+        log.warning("检测到输入法 %s 但未找到系统 Qt 输入法插件", module)
+        os.environ.setdefault("QT_IM_MODULE", module)
+        return
+
+    tmp_root = tempfile.mkdtemp(prefix="hf-im-")
+    im_dir = os.path.join(tmp_root, "platforminputcontexts")
+    os.makedirs(im_dir, exist_ok=True)
+    for src in plugin_files:
+        link = os.path.join(im_dir, os.path.basename(src))
+        try:
+            os.symlink(src, link)
+        except Exception:
+            import shutil
+            shutil.copy2(src, link)
+
+    # Qt 从 QT_PLUGIN_PATH 额外搜索插件；只含 platforminputcontexts，不污染其他
+    old = os.environ.get("QT_PLUGIN_PATH", "")
+    os.environ["QT_PLUGIN_PATH"] = tmp_root + (os.pathsep + old if old else "")
+    os.environ["QT_IM_MODULE"] = "fcitx" if module.startswith("fcitx") else "ibus"
+    # 部分 fcitx 插件需要
+    os.environ.setdefault("XMODIFIERS", "@im=fcitx" if module.startswith("fcitx") else "@im=ibus")
+    log.info("Linux 输入法适配: module=%s, plugins=%s",
+             os.environ["QT_IM_MODULE"], plugin_files)
+
+
 log.info("开始导入依赖库...")
 from PyQt5.QtWidgets import QApplication, QMessageBox
 from PyQt5.QtCore import QLockFile
@@ -84,6 +170,7 @@ def main():
     if sys.platform.startswith('linux'):
         # Linux桌面环境适配
         os.environ['QT_QPA_PLATFORM'] = 'xcb'
+        _setup_linux_inputmethod()
     log.info("创建 QApplication...")
     app = QApplication(sys.argv)
     app.setApplicationName("HandsFree")
